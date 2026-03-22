@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Type Monitor</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --border: rgba(255,255,255,0.08);
+    --text: #e8eaf0;
+    --muted: #7a7d8a;
+    --5g: #22d47f;
+    --4g: #f5a623;
+    --off: #ef5350;
+    --flux: #7b8ff7;
+    --font: 'Segoe UI', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 32px 16px;
+  }
+
+  h1 {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 28px;
+  }
+
+  .status-ring {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 3px solid var(--ring-color, #444);
+    margin-bottom: 20px;
+    transition: border-color 0.5s, box-shadow 0.5s;
+    position: relative;
+  }
+
+  .status-ring.glow {
+    box-shadow: 0 0 28px var(--ring-color);
+  }
+
+  .status-ring .network-type {
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    transition: color 0.5s;
+  }
+
+  .status-ring .latency-val {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .status-label {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 28px;
+    min-height: 20px;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+    max-width: 400px;
+    margin-bottom: 28px;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 10px;
+    text-align: center;
+  }
+
+  .card .label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    letter-spacing: 0.05em;
+  }
+
+  .card .value {
+    font-size: 20px;
+    font-weight: 600;
+  }
+
+  .chart-wrap {
+    width: 100%;
+    max-width: 400px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+
+  .chart-title {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+  }
+
+  canvas { width: 100% !important; }
+
+  .log-wrap {
+    width: 100%;
+    max-width: 400px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+  }
+
+  .log-title {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .log-entry {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    animation: fadeIn 0.4s ease;
+  }
+  .log-entry:last-child { border-bottom: none; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+  .log-time { color: var(--muted); }
+  .log-badge {
+    padding: 1px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
+  .notif-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-bottom: 24px;
+  }
+  .notif-btn:hover { background: rgba(255,255,255,0.06); }
+
+  .thresholds {
+    width: 100%;
+    max-width: 400px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+
+  .thresh-title {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+  }
+
+  .thresh-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 13px;
+  }
+  .thresh-row label { color: var(--muted); min-width: 80px; }
+  .thresh-row input[type=range] { flex: 1; accent-color: var(--flux); }
+  .thresh-row .val { min-width: 45px; text-align: right; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>Network Type Monitor</h1>
+
+<div class="status-ring" id="ring">
+  <span class="network-type" id="ntype">—</span>
+  <span class="latency-val" id="latval">measuring...</span>
+</div>
+
+<div class="status-label" id="statuslabel">Starting up...</div>
+
+<div class="cards">
+  <div class="card">
+    <div class="label">CURRENT</div>
+    <div class="value" id="cur-ms">—</div>
+  </div>
+  <div class="card">
+    <div class="label">AVERAGE</div>
+    <div class="value" id="avg-ms">—</div>
+  </div>
+  <div class="card">
+    <div class="label">BEST</div>
+    <div class="value" id="best-ms">—</div>
+  </div>
+</div>
+
+<div class="chart-wrap">
+  <div class="chart-title">Latency over time (ms)</div>
+  <canvas id="chart" height="100"></canvas>
+</div>
+
+<button class="notif-btn" id="notif-btn" onclick="requestNotif()">Enable browser notifications</button>
+
+<div class="log-wrap">
+  <div class="log-title">Switch log</div>
+  <div id="log-body"><div class="log-entry"><span class="log-time">—</span><span style="color:var(--muted);font-size:12px">No switches yet</span></div></div>
+</div>
+
+<div class="thresholds">
+  <div class="thresh-title">Thresholds</div>
+  <div class="thresh-row">
+    <label>5G below</label>
+    <input type="range" id="fast-thresh" min="20" max="120" value="50" oninput="fastThresh=+this.value;document.getElementById('ft-val').textContent=this.value+'ms'">
+    <span class="val" id="ft-val">50ms</span>
+  </div>
+  <div class="thresh-row">
+    <label>4G above</label>
+    <input type="range" id="slow-thresh" min="60" max="250" value="65" oninput="slowThresh=+this.value;document.getElementById('st-val').textContent=this.value+'ms'">
+    <span class="val" id="st-val">65ms</span>
+  </div>
+</div>
+
+<script>
+let fastThresh = 50, slowThresh = 65;
+let history = [];
+let lastStatus = null;
+let switches = [];
+const MAXPOINTS = 40;
+const CHECK_INTERVAL = 8000; // ms
+
+const ring = document.getElementById('ring');
+const ntype = document.getElementById('ntype');
+const latval = document.getElementById('latval');
+const statuslabel = document.getElementById('statuslabel');
+const curMs = document.getElementById('cur-ms');
+const avgMs = document.getElementById('avg-ms');
+const bestMs = document.getElementById('best-ms');
+const logBody = document.getElementById('log-body');
+const notifBtn = document.getElementById('notif-btn');
+
+// Canvas chart setup
+const canvas = document.getElementById('chart');
+const ctx = canvas.getContext('2d');
+canvas.width = canvas.offsetWidth * devicePixelRatio;
+canvas.height = 100 * devicePixelRatio;
+canvas.style.height = '100px';
+
+let notifAllowed = Notification.permission === 'granted';
+if (notifAllowed) notifBtn.textContent = 'Browser notifications: ON';
+
+function requestNotif() {
+  Notification.requestPermission().then(p => {
+    notifAllowed = p === 'granted';
+    notifBtn.textContent = notifAllowed ? 'Browser notifications: ON' : 'Notifications denied';
+  });
+}
+
+async function measureLatency() {
+  const t0 = performance.now();
+  try {
+    await fetch('https://www.gstatic.com/generate_204?r=' + Math.random(), {
+      mode: 'no-cors', cache: 'no-store'
+    });
+    return performance.now() - t0;
+  } catch(e) {
+    return null;
+  }
+}
+
+function classify(ms) {
+  if (ms === null) return { status: 'offline', color: 'var(--off)', label: 'No connection', abbr: 'X' };
+  if (ms < fastThresh) return { status: '5G', color: 'var(--5g)', label: 'Fast — 5G-like connection', abbr: '5G' };
+  if (ms < slowThresh) return { status: 'flux', color: 'var(--flux)', label: 'Fluctuating — moving between 5G and 4G', abbr: '~' };
+  return { status: '4G', color: 'var(--4g)', label: 'Slower — 4G-like connection', abbr: '4G' };
+}
+
+function drawChart() {
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  if (history.length < 2) return;
+
+  const vals = history.map(v => v === null ? 0 : v);
+  const max = Math.max(...vals.filter(v=>v>0), slowThresh * 1.2);
+
+  // threshold lines
+  function yFor(v) { return h - (v / max) * h * 0.85; }
+
+  ctx.setLineDash([4,4]);
+  ctx.strokeStyle = 'rgba(34,212,127,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, yFor(fastThresh)); ctx.lineTo(w, yFor(fastThresh)); ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(245,166,35,0.25)';
+  ctx.beginPath(); ctx.moveTo(0, yFor(slowThresh)); ctx.lineTo(w, yFor(slowThresh)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // line
+  const step = w / (MAXPOINTS - 1);
+  ctx.beginPath();
+  ctx.lineWidth = 2 * devicePixelRatio;
+  history.forEach((v, i) => {
+    const x = i * step;
+    const y = v === null ? h - 4 : yFor(v);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = 'rgba(123,143,247,0.8)';
+  ctx.stroke();
+
+  // dots
+  history.forEach((v, i) => {
+    if (v === null) return;
+    const cl = classify(v);
+    ctx.beginPath();
+    ctx.arc(i * step, yFor(v), 3 * devicePixelRatio, 0, Math.PI * 2);
+    ctx.fillStyle = cl.color;
+    ctx.fill();
+  });
+}
+
+function addLogEntry(status, ms) {
+  const old = logBody.querySelector('.log-entry span[style]');
+  if (old && old.textContent === 'No switches yet') logBody.innerHTML = '';
+
+  const colors = { '5G': 'var(--5g)', '4G': 'var(--4g)', 'flux': 'var(--flux)', 'offline': 'var(--off)' };
+  const labels = { '5G': '5G', '4G': '4G', 'flux': 'FLUCTUATING', 'offline': 'OFFLINE' };
+
+  const row = document.createElement('div');
+  row.className = 'log-entry';
+  const now = new Date().toLocaleTimeString();
+  const msStr = ms !== null ? ` — ${ms.toFixed(0)}ms` : '';
+  row.innerHTML = `<span class="log-time">${now}${msStr}</span>
+    <span class="log-badge" style="background:${colors[status]}22;color:${colors[status]}">${labels[status]}</span>`;
+  logBody.prepend(row);
+
+  // Keep max 8 entries
+  while (logBody.children.length > 8) logBody.removeChild(logBody.lastChild);
+}
+
+async function tick() {
+  const ms = await measureLatency();
+  const cl = classify(ms);
+
+  // Update ring
+  ring.style.setProperty('--ring-color', cl.color);
+  ring.classList.toggle('glow', cl.status !== 'offline');
+  ntype.textContent = cl.abbr;
+  ntype.style.color = cl.color;
+  latval.textContent = ms !== null ? ms.toFixed(0) + 'ms' : '—';
+  statuslabel.textContent = cl.label;
+
+  // Stats
+  history.push(ms);
+  if (history.length > MAXPOINTS) history.shift();
+  const valid = history.filter(v => v !== null);
+  curMs.textContent = ms !== null ? ms.toFixed(0) + 'ms' : '—';
+  avgMs.textContent = valid.length ? (valid.reduce((a,b)=>a+b,0)/valid.length).toFixed(0) + 'ms' : '—';
+  bestMs.textContent = valid.length ? Math.min(...valid).toFixed(0) + 'ms' : '—';
+
+  drawChart();
+
+  // Switch detection (debounced: 2 consecutive same readings)
+  if (cl.status !== lastStatus) {
+    // Notify
+    if (lastStatus !== null) {
+      addLogEntry(cl.status, ms);
+      if (notifAllowed) {
+        const msgs = {
+          '5G': `Fast 5G-like signal detected (${ms?.toFixed(0)}ms) — use data freely!`,
+          '4G': `Slower 4G signal (${ms?.toFixed(0)}ms) — reduce data usage.`,
+          'flux': `Signal is fluctuating (${ms?.toFixed(0)}ms).`,
+          'offline': 'No internet connection.'
+        };
+        new Notification('Network Switch Detected', {
+          body: msgs[cl.status],
+          icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text y="18" font-size="18">📶</text></svg>'
+        });
+      }
+    }
+    lastStatus = cl.status;
+  }
+}
+
+tick();
+setInterval(tick, CHECK_INTERVAL);
+</script>
+</body>
+</html>
